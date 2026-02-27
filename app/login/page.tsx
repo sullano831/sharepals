@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
-  const searchParams = useSearchParams();
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +22,10 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      const redirectTo = searchParams.get("redirect") ?? "/dashboard";
+      const search =
+        typeof window !== "undefined" ? window.location.search : "";
+      const params = new URLSearchParams(search);
+      const redirectTo = params.get("redirect") ?? "/dashboard";
       const path = redirectTo.startsWith("/") ? redirectTo : `/${redirectTo}`;
       window.location.href = path;
     }

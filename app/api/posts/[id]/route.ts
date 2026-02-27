@@ -169,13 +169,13 @@ export async function PATCH(
     .eq("post_id", id)
     .order("created_at", { ascending: true });
 
-  let files = allFiles ?? [];
+  let files = (allFiles ?? []) as { [k: string]: unknown }[];
   if (files.length) {
     files = await Promise.all(
-      files.map(async (f: { file_url: string }) => {
+      files.map(async (f) => {
         const { data: signed } = await supabase.storage
           .from("post-files")
-          .createSignedUrl(f.file_url, 3600);
+          .createSignedUrl(f.file_url as string, 3600);
         return { ...f, signed_url: signed?.signedUrl ?? null };
       })
     );

@@ -114,13 +114,13 @@ export async function POST(req: NextRequest) {
     .eq("post_id", post.id)
     .order("created_at", { ascending: true });
 
-  let files: { id: string; file_url: string; file_name: string; file_type: string | null; file_size: number | null; created_at: string; signed_url: string | null }[] = [];
+  let files = [] as { [k: string]: unknown }[];
   if (postFiles?.length) {
     files = await Promise.all(
-      postFiles.map(async (f: { file_url: string }) => {
+      postFiles.map(async (f) => {
         const { data: signed } = await supabase.storage
           .from("post-files")
-          .createSignedUrl(f.file_url, 3600);
+          .createSignedUrl(f.file_url as string, 3600);
         return { ...f, signed_url: signed?.signedUrl ?? null };
       })
     );

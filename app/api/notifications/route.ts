@@ -80,9 +80,11 @@ export async function GET() {
   return NextResponse.json({ data });
 }
 
-type DismissBody =
-  | { clearAll: true }
-  | { follower_id: string; created_at: string };
+type DismissBody = {
+  clearAll?: true;
+  follower_id?: string;
+  created_at?: string;
+};
 
 /** POST /api/notifications — dismiss one notification or clear all (persisted in notification_dismissals) */
 export async function POST(req: Request) {
@@ -100,7 +102,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (body.clearAll === true) {
+  if ("clearAll" in body && body.clearAll === true) {
     const { data: rows } = await supabase
       .from("follows")
       .select("follower_id, created_at")

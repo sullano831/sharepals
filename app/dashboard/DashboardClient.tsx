@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Post, PostFile } from "@/lib/types/database";
-import type { Profile } from "@/lib/types/database";
+import type { Post, PostFile, Profile } from "@/lib/types/database";
 import AppHeader from "@/app/components/AppHeader";
 import { Video, Image, FileText, Pencil, Trash2, FileInput, FileCode } from "lucide-react";
 
@@ -18,6 +17,8 @@ export type DashboardClientProps = {
 };
 
 type UploadMode = "video" | "photo" | "file";
+
+type ProfileForDashboard = Pick<Profile, "avatar_url" | "display_name">;
 
 const FILE_ACCEPT: Record<UploadMode, string> = {
   video: "video/*",
@@ -68,7 +69,7 @@ export default function DashboardClient({
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<{ email?: string; id: string } | null>(initialUser);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<ProfileForDashboard | null>(null);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [loading, setLoading] = useState(!initialUser);
   const [feedLoading, setFeedLoading] = useState(!hasServerFeed);

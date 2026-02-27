@@ -78,7 +78,10 @@ export default function AppHeader() {
   }
 
   const NOTIF_KEY_SEP = "|";
-  function notifKey(follower_id: string, created_at: string | undefined) {
+  function notifKey(
+    follower_id: string,
+    created_at: string | number | Date | null | undefined
+  ) {
     const t =
       typeof created_at === "string"
         ? created_at
@@ -195,9 +198,17 @@ export default function AppHeader() {
   async function handleRemoveSelected() {
     if (selectedNotifKeys.size === 0 || dismissLoading) return;
     const keysToRemove = new Set(selectedNotifKeys);
-    const toDismiss = [...keysToRemove].map(parseNotifKey).filter((p): p is { follower_id: string; created_at: string } =>
-      p !== null && p.follower_id && p.created_at && !Number.isNaN(new Date(p.created_at).getTime())
-    );
+    const toDismiss = [...keysToRemove]
+      .map(parseNotifKey)
+      .filter(
+        (p): p is { follower_id: string; created_at: string } =>
+          p !== null &&
+          typeof p.follower_id === "string" &&
+          p.follower_id.length > 0 &&
+          typeof p.created_at === "string" &&
+          p.created_at.length > 0 &&
+          !Number.isNaN(new Date(p.created_at).getTime())
+      );
     if (toDismiss.length === 0) return;
     setDismissLoading(true);
     setNotifications((prev) =>

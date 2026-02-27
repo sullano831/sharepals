@@ -40,6 +40,7 @@ export async function fetchFeed(
   }
 
   let { data, error } = await query;
+  let rows: unknown[] | null = data ?? null;
 
   // If join fails (e.g. relation name differs in project), fallback to posts only so feed still loads
   if (error) {
@@ -52,11 +53,11 @@ export async function fetchFeed(
     if (cursor) fallbackQuery = fallbackQuery.lt("created_at", cursor);
     const res = await fallbackQuery;
     if (res.error) throw res.error;
-    data = res.data;
+    rows = res.data ?? null;
   }
 
-  const hasMore = (data?.length ?? 0) > limit;
-  const rawPosts = hasMore ? data!.slice(0, limit) : data ?? [];
+  const hasMore = (rows?.length ?? 0) > limit;
+  const rawPosts = hasMore ? rows!.slice(0, limit) : rows ?? [];
   const nextCursor = hasMore ? (rawPosts[rawPosts.length - 1] as { created_at: string }).created_at : null;
 
   // When join failed or profiles missing display_name/username, fetch profiles so posts show real names (not "Someone")
@@ -88,7 +89,14 @@ export async function fetchFeed(
   }
 
   const posts = await Promise.all(
-    rawPosts.map(async (p: { id: string; user_id?: string; file_url?: string | null; profiles?: unknown; [k: string]: unknown }) => {
+    (rawPosts as unknown[]).map(async (value) => {
+      const p = value as {
+        id: string;
+        user_id?: string;
+        file_url?: string | null;
+        profiles?: unknown;
+        [k: string]: unknown;
+      };
       let postFiles: { id: string; file_url: string; file_name: string; file_type: string | null; file_size: number | null; created_at: string; [k: string]: unknown }[] | null = null;
       try {
         const result = await supabase
