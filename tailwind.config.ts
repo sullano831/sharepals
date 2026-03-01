@@ -13,6 +13,11 @@ const config: Config = {
         sans: ["var(--font-jakarta)", "system-ui", "sans-serif"],
       },
       colors: {
+        burgundy: {
+          DEFAULT: "#722F37",
+          light: "#8B3A42",
+          dark: "#5C262D",
+        },
         accent: {
           DEFAULT: "#c9a227",
           hover: "#b8921f",

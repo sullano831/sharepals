@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Post, PostFile, Profile } from "@/lib/types/database";
 import AppHeader from "@/app/components/AppHeader";
-import { Video, Image, FileText, Pencil, Trash2, FileInput, FileCode } from "lucide-react";
+import { Video, Image, FileText, Pencil, Trash2, FileInput, FileCode, X, Search } from "lucide-react";
 
 /** Dashboard flow: post → shows in feed; for your posts you can Edit (modify) or Delete (remove) in the dashboard. */
 export type DashboardClientProps = {
@@ -18,7 +19,22 @@ export type DashboardClientProps = {
 
 type UploadMode = "video" | "photo" | "file";
 
+type FeedFilter = "all" | "images" | "videos" | "files" | "notes";
+
 type ProfileForDashboard = Pick<Profile, "avatar_url" | "display_name">;
+
+function getPostMediaKind(post: Post): FeedFilter {
+  const types: string[] = [];
+  if (post.files?.length) {
+    post.files.forEach((f) => f.file_type && types.push(f.file_type));
+  } else if (post.file_type) {
+    types.push(post.file_type);
+  }
+  if (types.length === 0) return "notes";
+  if (types.some((t) => t.startsWith("video/"))) return "videos";
+  if (types.some((t) => t.startsWith("image/"))) return "images";
+  return "files";
+}
 
 const FILE_ACCEPT: Record<UploadMode, string> = {
   video: "video/*",
@@ -44,6 +60,7 @@ const SIDEBAR_DEFAULT_WIDTH = 280;
 const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB, must match API
+const MAX_CAPTION_WORDS = 500;
 
 // All supported types for "Add file(s)" in edit so any file can be added
 const ACCEPT_ALL =
@@ -93,7 +110,27 @@ export default function DashboardClient({
   const [followLoadingId, setFollowLoadingId] = useState<string | null>(null);
   const [feedError, setFeedError] = useState(false);
   const [feedErrorMessage, setFeedErrorMessage] = useState<string | null>(null);
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const [feedSearchQuery, setFeedSearchQuery] = useState("");
   const skipFirstFeedFetchRef = useRef(hasServerFeed);
+
+  const typeFilteredPosts =
+    feedFilter === "all"
+      ? posts
+      : posts.filter((p) => getPostMediaKind(p) === feedFilter);
+
+  const filteredPosts = (() => {
+    const q = feedSearchQuery.trim().toLowerCase();
+    if (!q) return typeFilteredPosts;
+    return typeFilteredPosts.filter((post) => {
+      const rawProfiles = (post as Post & { profiles?: { display_name?: string; username?: string } | Array<{ display_name?: string; username?: string }> }).profiles;
+      const profilesObj = Array.isArray(rawProfiles) ? rawProfiles[0] : rawProfiles;
+      const authorName = (profilesObj?.display_name ?? profilesObj?.username ?? "").toLowerCase();
+      const content = (post.content ?? "").toLowerCase();
+      const fileNames = post.files?.map((f) => (f.file_name ?? "").toLowerCase()).join(" ") ?? (post.file_name ?? "").toLowerCase();
+      return authorName.includes(q) || content.includes(q) || fileNames.includes(q);
+    });
+  })();
 
   const [toolsSidebarWidth, setToolsSidebarWidth] = useState(() => {
     if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
@@ -274,6 +311,22 @@ export default function DashboardClient({
     setUploadMode(mode);
     setFormExpanded(true);
   }
+
+  function closeComposerModal() {
+    setFormExpanded(false);
+    setCaption("");
+    setFiles([]);
+    setError("");
+  }
+
+  useEffect(() => {
+    if (!formExpanded) return;
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeComposerModal();
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [formExpanded]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -612,7 +665,7 @@ export default function DashboardClient({
         <main className="flex-1 min-w-0 max-w-2xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10 lg:py-8">
         {/* Composer card */}
         <div className="bg-surface-card dark:bg-stone-900/80 backdrop-blur rounded-2xl border border-surface-border dark:border-stone-700/80 shadow-soft mb-8 overflow-hidden">
-          <form onSubmit={handleUpload}>
+          <form id="share-composer-form" onSubmit={handleUpload}>
             <input
               ref={fileInputRef}
               type="file"
@@ -639,8 +692,12 @@ export default function DashboardClient({
             />
             <div className="p-4 sm:p-5">
               <div
-                className="flex items-center gap-3 cursor-text rounded-xl p-2 -m-2 transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                className="flex items-center gap-3 cursor-pointer rounded-xl p-2 -m-2 transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/50"
                 onClick={() => setFormExpanded(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && setFormExpanded(true)}
+                aria-label="Open share composer"
               >
                 {profile?.avatar_url && process.env.NEXT_PUBLIC_SUPABASE_URL ? (
                   <img
@@ -653,141 +710,167 @@ export default function DashboardClient({
                     {(profile?.display_name || user.email || "?").charAt(0).toUpperCase()}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="flex-1 text-left text-stone-500 dark:text-stone-400 text-sm py-2.5 px-4 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-surface-border dark:border-stone-600/80 hover:border-stone-300 dark:hover:border-stone-600 transition"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setFormExpanded(true);
-                  }}
-                >
+                <span className="flex-1 text-left text-stone-500 dark:text-stone-400 text-sm py-2.5 px-4 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-surface-border dark:border-stone-600/80">
                   What do you want to share?
-                </button>
-              </div>
-
-              {/* Type selector — always visible */}
-              <div className="flex items-center gap-1 mt-4 pt-4 border-t border-surface-border dark:border-stone-700/80">
-                <button
-                  type="button"
-                  onClick={() => openComposer("video")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "video" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
-                >
-                  <Video className="w-5 h-5 shrink-0" />
-                  <span className="hidden sm:inline">Video</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openComposer("photo")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "photo" ? "bg-blue-500/15 text-blue-700 dark:text-blue-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
-                >
-                  <Image className="w-5 h-5 shrink-0" />
-                  <span className="hidden sm:inline">Photo</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openComposer("file")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "file" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
-                >
-                  <FileText className="w-5 h-5 shrink-0" />
-                  <span className="hidden sm:inline">File</span>
-                </button>
+                </span>
               </div>
             </div>
 
-            {formExpanded && (
-              <div className="px-4 sm:px-5 pb-5 pt-0 border-t border-surface-border dark:border-stone-700/80 space-y-4">
-                <div>
-                  <input
-                    type="text"
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
-                    placeholder="Add a caption…"
-                    className="w-full border border-surface-border dark:border-stone-600 rounded-xl px-4 py-3 text-sm text-stone-800 dark:text-stone-100 dark:bg-stone-800/50 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-accent/30 dark:focus:ring-accent/40 focus:border-accent transition"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 border border-surface-border dark:border-stone-600 rounded-xl px-4 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-800 transition"
+            {/* Share composer modal — portaled so it’s a real overlay */}
+            {formExpanded &&
+              typeof document !== "undefined" &&
+              createPortal(
+                <div
+                  className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                  onClick={closeComposerModal}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="share-modal-title"
+                >
+                  <div
+                    className="relative w-full max-w-md rounded-2xl border border-stone-200 dark:border-stone-600 bg-white dark:bg-stone-900 shadow-2xl overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Add file(s)
-                  </button>
-                  <span className="text-xs text-stone-500 dark:text-stone-400">Max 50 MB per file</span>
-                  {files.length > 0 && (
-                    <ul className="flex flex-wrap gap-2">
-                      {files.map((f, i) => (
-                        <li
-                          key={`${f.name}-${i}`}
-                          className="inline-flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 rounded-lg pl-2 pr-1 py-1"
-                        >
-                          <span className="truncate max-w-[160px]">{f.name}</span>
-                          <span className="text-xs text-stone-500">({(f.size / 1024).toFixed(1)} KB)</span>
-                          <button
-                            type="button"
-                            onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                            className="text-stone-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 rounded"
-                            aria-label={`Remove ${f.name}`}
-                          >
-                            ×
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                    <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stone-200 dark:border-stone-700">
+                      <h2 id="share-modal-title" className="text-lg font-semibold text-stone-900 dark:text-stone-100">
+                        Create post
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={closeComposerModal}
+                        className="p-2 rounded-xl text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                        aria-label="Close"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="p-5 space-y-4">
+                    {/* Type selector */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openComposer("video")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "video" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
+                      >
+                        <Video className="w-5 h-5 shrink-0" />
+                        <span className="hidden sm:inline">Video</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openComposer("photo")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "photo" ? "bg-blue-500/15 text-blue-700 dark:text-blue-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
+                      >
+                        <Image className="w-5 h-5 shrink-0" />
+                        <span className="hidden sm:inline">Photo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openComposer("file")}
+                        className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition min-w-0 ${uploadMode === "file" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"}`}
+                      >
+                        <FileText className="w-5 h-5 shrink-0" />
+                        <span className="hidden sm:inline">File</span>
+                      </button>
+                    </div>
+                    <div>
+                      <textarea
+                        value={caption}
+                        onChange={(e) => {
+                          const text = e.target.value;
+                          const words = text.trim().split(/\s+/).filter(Boolean);
+                          if (words.length <= MAX_CAPTION_WORDS) setCaption(text);
+                          else setCaption(words.slice(0, MAX_CAPTION_WORDS).join(" "));
+                        }}
+                        placeholder="Add a caption…"
+                        rows={3}
+                        className="w-full resize-y min-h-[80px] border border-surface-border dark:border-stone-600 rounded-xl px-4 py-3 text-sm text-stone-800 dark:text-stone-100 dark:bg-stone-800/50 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-2 focus:ring-accent/30 dark:focus:ring-accent/40 focus:border-accent transition"
+                      />
+                      <p className="mt-1.5 text-xs text-stone-500 dark:text-stone-400">
+                        {caption.trim().split(/\s+/).filter(Boolean).length}/{MAX_CAPTION_WORDS} words
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300 border border-surface-border dark:border-stone-600 rounded-xl px-4 py-2.5 hover:bg-stone-50 dark:hover:bg-stone-800 transition"
+                      >
+                        Add file(s)
+                      </button>
+                      <span className="text-xs text-stone-500 dark:text-stone-400 block">Max 50 MB per file</span>
+                      {files.length > 0 && (
+                        <ul className="flex flex-wrap gap-2">
+                          {files.map((f, i) => (
+                            <li
+                              key={`${f.name}-${i}`}
+                              className="inline-flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 rounded-lg pl-2 pr-1 py-1"
+                            >
+                              <span className="truncate max-w-[160px]">{f.name}</span>
+                              <span className="text-xs text-stone-500">({(f.size / 1024).toFixed(1)} KB)</span>
+                              <button
+                                type="button"
+                                onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="text-stone-400 hover:text-rose-500 dark:hover:text-rose-400 p-0.5 rounded"
+                                aria-label={`Remove ${f.name}`}
+                              >
+                                ×
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
+                        Visibility
+                      </span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="visibility"
+                          checked={visibility === "members"}
+                          onChange={() => setVisibility("members")}
+                          className="text-accent focus:ring-accent"
+                        />
+                        <span className="text-sm text-stone-700 dark:text-stone-300">Everyone</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="visibility"
+                          checked={visibility === "private"}
+                          onChange={() => setVisibility("private")}
+                          className="text-accent focus:ring-accent"
+                        />
+                        <span className="text-sm text-stone-700 dark:text-stone-300">Only me</span>
+                      </label>
+                    </div>
+                    {error && (
+                      <p className="text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 px-4 py-2.5 rounded-xl">
+                        {error}
+                      </p>
+                    )}
+                    <div className="flex gap-3 pt-1">
+                      <button
+                        type="submit"
+                        form="share-composer-form"
+                        disabled={uploading || (!files.length && !caption.trim())}
+                        className="flex-1 bg-stone-900 dark:bg-white text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-100 disabled:opacity-50 disabled:pointer-events-none font-semibold py-3 rounded-xl text-sm transition shadow-card"
+                      >
+                        {uploading ? "Sharing…" : "Share"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={closeComposerModal}
+                        className="px-5 py-3 rounded-xl border border-stone-200 dark:border-stone-600 text-stone-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-800 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  <span className="text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-                    Visibility
-                  </span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="visibility"
-                      checked={visibility === "members"}
-                      onChange={() => setVisibility("members")}
-                      className="text-accent focus:ring-accent"
-                    />
-                    <span className="text-sm text-stone-700 dark:text-stone-300">Everyone</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="visibility"
-                      checked={visibility === "private"}
-                      onChange={() => setVisibility("private")}
-                      className="text-accent focus:ring-accent"
-                    />
-                    <span className="text-sm text-stone-700 dark:text-stone-300">Only me</span>
-                  </label>
-                </div>
-                {error && (
-                  <p className="text-sm text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 px-4 py-2.5 rounded-xl">
-                    {error}
-                  </p>
-                )}
-                <div className="flex gap-3 pt-1">
-                  <button
-                    type="submit"
-                    disabled={uploading || (!files.length && !caption.trim())}
-                    className="flex-1 bg-stone-900 dark:bg-white text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-100 disabled:opacity-50 disabled:pointer-events-none font-semibold py-3 rounded-xl text-sm transition shadow-card"
-                  >
-                    {uploading ? "Sharing…" : "Share"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormExpanded(false);
-                      setCaption("");
-                      setFiles([]);
-                      setError("");
-                    }}
-                    className="px-5 py-3 rounded-xl border border-surface-border dark:border-stone-600 text-stone-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-800 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              </div>,
+              document.body
             )}
           </form>
         </div>
@@ -811,12 +894,41 @@ export default function DashboardClient({
 
         {/* Feed section */}
         <section aria-label="Feed">
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-4">
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-surface-border dark:via-stone-700 to-transparent" />
             <h2 className="text-sm font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider shrink-0">
               {mineOnly ? "My posts" : "Shared by everyone"}
             </h2>
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-surface-border dark:via-stone-700 to-transparent" />
+          </div>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 dark:text-stone-500 pointer-events-none" />
+            <input
+              type="search"
+              value={feedSearchQuery}
+              onChange={(e) => setFeedSearchQuery(e.target.value)}
+              placeholder="Search posts by caption, author, or file name…"
+              aria-label="Search posts"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-border dark:border-stone-600 bg-stone-50 dark:bg-stone-800/80 text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 text-sm focus:outline-none focus:ring-2 focus:ring-stone-900/20 dark:focus:ring-stone-500 focus:border-stone-400 dark:focus:border-stone-500 transition"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 mb-5" role="tablist" aria-label="Filter by type">
+            {(["all", "images", "videos", "files", "notes"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={feedFilter === key}
+                onClick={() => setFeedFilter(key)}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
+                  feedFilter === key
+                    ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 shadow-card"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                }`}
+              >
+                {key === "all" ? "All" : key === "images" ? "Images" : key === "videos" ? "Videos" : key === "files" ? "Files" : "Notes"}
+              </button>
+            ))}
           </div>
         {feedLoading ? (
           <div className="space-y-4">
@@ -832,7 +944,7 @@ export default function DashboardClient({
               </div>
             ))}
           </div>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
           <div className="bg-surface-card dark:bg-stone-900/80 rounded-2xl border border-surface-border dark:border-stone-700/80 border-dashed p-12 text-center">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-4">
               <FileText className="w-7 h-7 text-stone-400 dark:text-stone-500" />
@@ -840,25 +952,51 @@ export default function DashboardClient({
             <p className="text-stone-600 dark:text-stone-300 font-medium">
               {feedError
                 ? "Couldn't load the feed"
-                : mineOnly
-                  ? "You haven't shared anything yet"
-                  : "No posts yet"}
+                : feedSearchQuery.trim()
+                  ? "No posts match your search"
+                  : feedFilter !== "all" && posts.length > 0
+                    ? `No ${feedFilter.charAt(0).toUpperCase() + feedFilter.slice(1)} in this feed`
+                    : mineOnly
+                      ? "You haven't shared anything yet"
+                      : "No posts yet"}
             </p>
             <p className="text-stone-500 dark:text-stone-500 text-sm mt-1">
               {feedError
                 ? feedErrorMessage || "Check your connection and try again."
-                : mineOnly
-                  ? "Share something above to see it here."
-                  : "Share something above, or refresh to see others' posts."}
+                : feedSearchQuery.trim()
+                  ? "Try a different search or clear the search bar."
+                  : feedFilter !== "all" && posts.length > 0
+                    ? "Try another filter or share something."
+                    : mineOnly
+                      ? "Share something above to see it here."
+                      : "Share something above, or refresh to see others' posts."}
             </p>
-            <button
-              type="button"
-              onClick={() => refetchFeed()}
-              disabled={feedLoading}
-              className="mt-4 px-4 py-2 rounded-xl text-sm font-medium bg-stone-200 dark:bg-stone-700 text-stone-800 dark:text-stone-200 hover:bg-stone-300 dark:hover:bg-stone-600 disabled:opacity-50 transition"
-            >
-              {feedLoading ? "Loading…" : "Refresh"}
-            </button>
+            {feedSearchQuery.trim() ? (
+              <button
+                type="button"
+                onClick={() => setFeedSearchQuery("")}
+                className="mt-4 px-4 py-2 rounded-xl text-sm font-medium bg-stone-200 dark:bg-stone-700 text-stone-800 dark:text-stone-200 hover:bg-stone-300 dark:hover:bg-stone-600 transition"
+              >
+                Clear search
+              </button>
+            ) : feedFilter !== "all" ? (
+              <button
+                type="button"
+                onClick={() => setFeedFilter("all")}
+                className="mt-4 px-4 py-2 rounded-xl text-sm font-medium bg-stone-200 dark:bg-stone-700 text-stone-800 dark:text-stone-200 hover:bg-stone-300 dark:hover:bg-stone-600 transition"
+              >
+                Show all
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => refetchFeed()}
+                disabled={feedLoading}
+                className="mt-4 px-4 py-2 rounded-xl text-sm font-medium bg-stone-200 dark:bg-stone-700 text-stone-800 dark:text-stone-200 hover:bg-stone-300 dark:hover:bg-stone-600 disabled:opacity-50 transition"
+              >
+                {feedLoading ? "Loading…" : "Refresh"}
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -883,7 +1021,7 @@ export default function DashboardClient({
               </div>
             )}
           <ul className="space-y-5">
-            {posts.map((post) => {
+            {filteredPosts.map((post) => {
               const isOwner = post.user_id === user.id;
               const isEditing = editingId === post.id;
               const isDeleting = deletingId === post.id;

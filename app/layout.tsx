@@ -22,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
-      <body className="antialiased min-h-screen bg-surface font-sans dark:bg-stone-950 dark:text-stone-100">
+      <body className="antialiased min-h-screen bg-surface font-sans dark:bg-stone-950 dark:text-stone-100" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var t=localStorage.getItem('sharepals-theme');var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);})();`,

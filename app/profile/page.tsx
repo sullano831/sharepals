@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
+import "react-easy-crop/react-easy-crop.css";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types/database";
 import AppHeader from "@/app/components/AppHeader";
+import { getCroppedCircleBlob, getDefaultCenterCrop } from "@/lib/cropImage";
 
 export default function ProfilePage() {
   const supabase = createClient();
@@ -24,6 +28,12 @@ export default function ProfilePage() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const [avatarSuccess, setAvatarSuccess] = useState(false);
+  const [avatarCropOpen, setAvatarCropOpen] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -75,7 +85,11 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const onCropComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  function handleAvatarFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
     setAvatarError("");
@@ -89,13 +103,38 @@ export default function ProfilePage() {
       setAvatarError("Image must be under 5 MB.");
       return;
     }
+    const url = URL.createObjectURL(file);
+    setAvatarFile(file);
+    setAvatarPreviewUrl(url);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setAvatarCropOpen(true);
+    e.target.value = "";
+  }
+
+  function closeCropModal() {
+    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+    setAvatarCropOpen(false);
+    setAvatarPreviewUrl(null);
+    setAvatarFile(null);
+    setCroppedAreaPixels(null);
+  }
+
+  async function handleAvatarCropApply() {
+    if (!avatarPreviewUrl || !user) return;
+    setAvatarError("");
+    setAvatarSuccess(false);
     setAvatarUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const cropArea =
+        croppedAreaPixels ?? (await getDefaultCenterCrop(avatarPreviewUrl));
+      const blob = await getCroppedCircleBlob(avatarPreviewUrl, cropArea);
+      const ext = avatarFile?.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${user.id}/avatar.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { contentType: file.type, upsert: true });
+        .upload(path, blob, { contentType: "image/jpeg", upsert: true });
       if (uploadError) throw uploadError;
       const { error: updateError } = await supabase
         .from("profiles")
@@ -106,11 +145,11 @@ export default function ProfilePage() {
       setAvatarSuccess(true);
       setTimeout(() => setAvatarSuccess(false), 3000);
       window.dispatchEvent(new CustomEvent("profile-updated"));
+      closeCropModal();
     } catch (err) {
       setAvatarError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setAvatarUploading(false);
-      e.target.value = "";
     }
   }
 
@@ -227,7 +266,7 @@ export default function ProfilePage() {
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp"
-                  onChange={handleAvatarChange}
+                  onChange={handleAvatarFileSelect}
                   disabled={avatarUploading}
                   className="block w-full text-sm text-stone-500 dark:text-stone-400 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-stone-100 dark:file:bg-stone-700 file:text-stone-700 dark:file:text-stone-200 hover:file:bg-stone-200 dark:hover:file:bg-stone-600 disabled:opacity-50"
                 />
@@ -239,6 +278,74 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+
+            {/* Crop modal */}
+            {avatarCropOpen && avatarPreviewUrl && (
+              <div
+                className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 p-4"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="crop-modal-title"
+              >
+                <h2 id="crop-modal-title" className="sr-only">
+                  Position and zoom your profile picture
+                </h2>
+                <div className="w-full max-w-md rounded-2xl overflow-hidden bg-stone-900 border border-stone-700">
+                  <p className="text-center text-sm text-stone-400 py-3 px-4 border-b border-stone-700">
+                    Drag the image to position it, then use the slider to zoom.
+                  </p>
+                  <div className="relative h-[320px] min-h-[280px] w-full bg-stone-800">
+                    <Cropper
+                      image={avatarPreviewUrl}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1}
+                      cropShape="round"
+                      objectFit="cover"
+                      showGrid={false}
+                      restrictPosition={true}
+                      onCropChange={setCrop}
+                      onCropComplete={onCropComplete}
+                      onZoomChange={setZoom}
+                      style={{
+                        containerStyle: { backgroundColor: "#292524" },
+                      }}
+                    />
+                  </div>
+                  <div className="p-4 space-y-4 bg-stone-900 border-t border-stone-700">
+                    <div>
+                      <label className="block text-xs font-medium text-stone-400 mb-1">Zoom</label>
+                      <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        value={zoom}
+                        onChange={(e) => setZoom(Number(e.target.value))}
+                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-stone-700 accent-stone-400"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={closeCropModal}
+                        className="flex-1 py-2.5 rounded-xl border border-stone-600 text-stone-300 text-sm font-medium hover:bg-stone-800 transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAvatarCropApply}
+                        disabled={avatarUploading}
+                        className="flex-1 py-2.5 rounded-xl bg-white text-stone-900 text-sm font-medium hover:bg-stone-100 disabled:opacity-50 transition"
+                      >
+                        {avatarUploading ? "Uploading…" : "Apply"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="bg-surface-card dark:bg-stone-900 rounded-2xl border border-surface-border dark:border-stone-700 p-5 shadow-soft">
