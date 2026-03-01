@@ -33,8 +33,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50/80 to-surface dark:from-stone-900 dark:to-stone-950 p-4">
       <div className="w-full max-w-[380px]">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-stone-900 dark:text-white tracking-tight">SharePals</h1>
-          <p className="text-stone-500 dark:text-stone-400 text-sm mt-1">Create your account</p>
+          <img src="/images/main-logo.png" alt="SharePals" className="h-20 w-auto mx-auto dark:invert" />
+          <p className="text-stone-500 dark:text-stone-400 text-sm mt-3">Create your account</p>
         </div>
 
         <form

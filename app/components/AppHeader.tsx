@@ -264,13 +264,18 @@ export default function AppHeader() {
   const initial = getInitial(profile?.display_name ?? null, user.email);
 
   return (
-    <header className="w-full bg-surface-card dark:bg-stone-900 border-b border-surface-border dark:border-stone-700 sticky top-0 z-20 shadow-card">
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center gap-4">
+    <header className="w-full bg-[#4a0a20] border-b border-[#4a0a20] sticky top-0 z-20 shadow-card">
+      <div className="w-full min-h-[4.25rem] px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center gap-4">
         <Link
           href="/dashboard"
-          className="text-lg font-bold text-stone-900 dark:text-white tracking-tight hover:text-stone-700 dark:hover:text-stone-200 transition shrink-0"
+          className="shrink-0 hover:opacity-90 transition h-10 flex items-center overflow-visible"
+          aria-label="SharePals home"
         >
-          SharePals
+          <img
+            src="/images/main-logo.png"
+            alt="SharePals"
+            className="h-10 w-auto object-contain object-left scale-[1.65] origin-left"
+          />
         </Link>
 
         <div className="flex items-center gap-3">
@@ -284,7 +289,7 @@ export default function AppHeader() {
                   return next;
                 });
               }}
-              className="p-2 rounded-full text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 transition focus:outline-none focus:ring-2 focus:ring-stone-900/20 dark:focus:ring-white/20 focus:ring-offset-2"
+              className="p-2 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-[#4a0a20]"
               aria-label="Notifications"
               aria-expanded={notifOpen}
             >
@@ -408,7 +413,7 @@ export default function AppHeader() {
             <button
               type="button"
               onClick={() => setOpen((o) => !o)}
-              className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-stone-900/20 dark:focus:ring-white/20 focus:ring-offset-2 p-0.5 hover:opacity-90 transition"
+              className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-[#4a0a20] p-0.5 hover:opacity-90 transition"
               aria-expanded={open}
               aria-haspopup="true"
             >
@@ -416,15 +421,15 @@ export default function AppHeader() {
                 <img
                   src={imageSrc}
                   alt=""
-                  className="w-9 h-9 rounded-full object-cover border-2 border-surface-border dark:border-stone-600"
+                  className="w-9 h-9 rounded-full object-cover border-2 border-white/30"
                 />
               ) : (
-                <span className="w-9 h-9 rounded-full bg-stone-200 dark:bg-stone-600 border-2 border-surface-border dark:border-stone-600 flex items-center justify-center text-stone-600 dark:text-stone-200 text-sm font-semibold shrink-0">
+                <span className="w-9 h-9 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white text-sm font-semibold shrink-0">
                   {initial}
                 </span>
               )}
               <svg
-                className={`w-4 h-4 text-stone-500 dark:text-stone-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+                className={`w-4 h-4 text-white/80 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -517,7 +522,7 @@ export default function AppHeader() {
                   className="flex items-center justify-between w-full px-4 py-2.5 text-sm text-white hover:bg-stone-800 transition"
                   role="menuitem"
                 >
-                  Buddy list
+                  My Pals
                   <svg className="w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>

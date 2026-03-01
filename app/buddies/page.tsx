@@ -88,7 +88,7 @@ export default function BuddiesPage() {
         <div className="flex items-center gap-3 mb-6">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-surface-border dark:via-stone-700 to-transparent" />
           <h1 className="text-lg font-semibold text-stone-800 dark:text-stone-100 shrink-0">
-            Buddy list
+            My Pals
           </h1>
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-surface-border dark:via-stone-700 to-transparent" />
         </div>

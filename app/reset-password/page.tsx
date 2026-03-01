@@ -69,12 +69,8 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50/80 to-surface dark:from-stone-900 dark:to-stone-950 p-4">
         <div className="w-full max-w-[380px]">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-stone-900 dark:text-white tracking-tight">
-              SharePals
-            </h1>
-            <p className="text-stone-500 dark:text-stone-400 text-sm mt-1">
-              Invalid or expired link
-            </p>
+            <img src="/images/main-logo.png" alt="SharePals" className="h-20 w-auto mx-auto dark:invert" />
+            <p className="text-stone-500 dark:text-stone-400 text-sm mt-3">Invalid or expired link</p>
           </div>
           <div className="bg-surface-card dark:bg-stone-900 rounded-2xl border border-surface-border dark:border-stone-700 p-6 shadow-soft space-y-4">
             <p className="text-sm text-stone-600 dark:text-stone-300 text-center">
@@ -102,12 +98,8 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50/80 to-surface dark:from-stone-900 dark:to-stone-950 p-4">
       <div className="w-full max-w-[380px]">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-stone-900 dark:text-white tracking-tight">
-            SharePals
-          </h1>
-          <p className="text-stone-500 dark:text-stone-400 text-sm mt-1">
-            Set a new password
-          </p>
+          <img src="/images/main-logo.png" alt="SharePals" className="h-20 w-auto mx-auto dark:invert" />
+          <p className="text-stone-500 dark:text-stone-400 text-sm mt-3">Set a new password</p>
         </div>
 
         <form

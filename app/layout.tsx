@@ -13,6 +13,9 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "SharePals",
   description: "Share files with your pals. Fun and buddy-friendly.",
+  icons: {
+    icon: "/images/favicon.png",
+  },
 };
 
 export default function RootLayout({
